@@ -1,103 +1,177 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useEffect } from 'react';
+import Logo from './components/Logo';
+import TodoList from './components/TodoList';
+import TodoEditor from './components/TodoEditor';
+import { fetchTodos, updateTodo, createTodo, deleteTodo } from './lib/api';
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              app/page.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [todos, setTodos] = useState([]);
+  const [selectedTodo, setSelectedTodo] = useState(null);
+  const [showEditor, setShowEditor] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  // Load todos from API
+  const loadTodos = async () => {
+    try {
+      setLoading(true);
+      const response = await fetchTodos(page);
+      setTodos(response.todos);
+      setTotalPages(response.totalPages);
+    } catch (err) {
+      setError('Failed to load todos');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Initial load and when page changes
+  useEffect(() => {
+    loadTodos();
+  }, [page]);
+
+  // Check if we're on mobile viewport
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      
+      // On mobile, hide editor initially if no todo is selected
+      if (mobile && !selectedTodo) {
+        setShowEditor(false);
+      }
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => {
+      window.removeEventListener('resize', checkMobile);
+    };
+  }, [selectedTodo]);
+
+  // Handle selecting a todo
+  const handleSelectTodo = (todo) => {
+    setSelectedTodo(todo);
+    setShowEditor(true);
+  };
+
+  // Handle creating a new todo
+  const handleCreateTodo = async () => {
+    try {
+      const newTodo = await createTodo({
+        title: 'New Additions',
+        description: 'To stay representative of framework & new example apps.'
+      });
+      
+      // Update the todos array with the new todo
+      setTodos([newTodo, ...todos]);
+      
+      // Select the new todo
+      setSelectedTodo(newTodo);
+      setShowEditor(true);
+    } catch (err) {
+      setError('Failed to create new todo');
+      console.error(err);
+    }
+  };
+
+  // Handle updating a todo
+  const handleUpdateTodo = async (todoId, updatedData) => {
+    try {
+      const updatedTodo = await updateTodo(todoId, updatedData);
+      
+      // Update both the selected todo and the todos list
+      setSelectedTodo(updatedTodo);
+      
+      // Update the todo in the list
+      setTodos(todos.map(todo => 
+        todo._id === updatedTodo._id ? updatedTodo : todo
+      ));
+    } catch (err) {
+      setError('Failed to update todo');
+      console.error(err);
+    }
+  };
+
+  // Handle deleting a todo
+  const handleDeleteTodo = async (todoId) => {
+    try {
+      await deleteTodo(todoId);
+      
+      // Remove the todo from the list
+      setTodos(todos.filter(todo => todo._id !== todoId));
+      
+      // Clear the selected todo
+      setSelectedTodo(null);
+      
+      if (isMobile) {
+        setShowEditor(false);
+      }
+    } catch (err) {
+      setError('Failed to delete todo');
+      console.error(err);
+    }
+  };
+
+  const handlePageChange = (newPage) => {
+    if (newPage > 0 && newPage <= totalPages) {
+      setPage(newPage);
+    }
+  };
+
+  const handleBack = () => {
+    setShowEditor(false);
+  };
+
+  return (
+    <main className="bg-[#f4f4f4]">
+      {/* Header */}
+      <header className="border-b p-6 bg-white">
+        <div className="container mx-auto">
+          <Logo />
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+      </header>
+
+      {/* Main content */}
+      <div className="container mx-auto bg-[#f4f4f4] min-h-screen">
+        <div className="flex flex-col md:flex-row h-full">
+          {/* Todo List (Sidebar) */}
+          <div className={`sidebar w-full md:w-1/3 lg:w-1/4 p-6 ${
+            isMobile && showEditor ? 'hidden' : 'block'
+          }`}>
+            <TodoList 
+              todos={todos}
+              loading={loading}
+              error={error}
+              page={page}
+              totalPages={totalPages}
+              selectedTodoId={selectedTodo?._id}
+              onSelectTodo={handleSelectTodo}
+              onCreateTodo={handleCreateTodo}
+              onPageChange={handlePageChange}
+            />
+          </div>
+
+          {/* Todo Editor (Main Area) */}
+          <div className={`flex-1 p-6 ${
+            isMobile && !showEditor ? 'hidden' : 'block'
+          }`}>
+            <TodoEditor 
+              todo={selectedTodo}
+              onUpdate={(updatedData) => handleUpdateTodo(selectedTodo._id, updatedData)}
+              onDelete={() => handleDeleteTodo(selectedTodo._id)}
+              onBack={handleBack}
+            />
+          </div>
+        </div>
+      </div>
+    </main>
   );
 }
